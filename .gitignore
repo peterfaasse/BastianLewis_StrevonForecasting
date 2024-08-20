@@ -1,0 +1,5 @@
+__pycache__/
+model_training/__pycache__/
+data/
+results/
+__pycache__/
