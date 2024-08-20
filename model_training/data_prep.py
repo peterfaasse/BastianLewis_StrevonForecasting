@@ -49,7 +49,7 @@ def run_data_prep(df: pd.DataFrame, data_dir: str) -> pd.DataFrame:
     df = bereken_jaar_ervaring(df)
     df = convert_postcode(df, data_dir)
     df = clean_werksituatie(df)
-    df['Voorkeursbranche'] = df['Voorkeursbranche'].str.lower()
+    df['Voorkeursbranche'] = df['Voorkeursbranche'].apply(lambda x: x.lower() if isinstance(x, str) else x)
     df = clean_strevon_startsalaris_werktijden(df, "Strevon startsalaris")
     df = clean_strevon_startsalaris_werktijden(df, "Strevon werktijden")
     df['diff_days'] = (df['belafspraak'] - df['cdate']).dt.days
@@ -57,30 +57,6 @@ def run_data_prep(df: pd.DataFrame, data_dir: str) -> pd.DataFrame:
     #prep for modelling
     df = date_cols_to_numeric(df)
     return df
-
-
-def replace_invalid_values(df, valid_values):
-    """
-    Replaces invalid categorical values in the DataFrame with "other".
-    Valid values are specified in the valid_values dictionary.
-    
-    Parameters:
-    df (pd.DataFrame): The DataFrame containing the data.
-    valid_values (dict): A dictionary where keys are column names and values are lists of valid values.
-    
-    Returns:
-    pd.DataFrame: The updated DataFrame with invalid values replaced by "other".
-    """
-    df_copy = df.copy()
-
-    for column, valid in valid_values.items():
-        if column in df_copy.columns:
-            # Apply the transformation
-            df_copy[column] = df_copy[column].apply(
-                lambda x: x if pd.isna(x) or x in valid else "other"
-            )
-    
-    return df_copy
 
 
 def prep_dataset_for_modelling(df: pd.DataFrame) -> pd.DataFrame:
@@ -144,7 +120,7 @@ def clean_werksituatie(df: pd.DataFrame) -> pd.DataFrame:
     pd.DataFrame
         The DataFrame with the 'Werksituatie' column cleaned and standardized.
     """
-    df['Werksituatie'] = df['Werksituatie'].apply(lambda x: x.lower() if math.isnan(x) is False else x)
+    df['Werksituatie'] = df['Werksituatie'].apply(lambda x: x.lower() if isinstance(x, str) else x)
     df['Werksituatie'].replace("werkloos", "ik ben werkloos", inplace=True)
 
     klus_answers = ['niks: 0 klussen', 'weinig: 3 tot 4 klussen', 'regelmatig: 5 tot 8 klussen',
@@ -368,12 +344,13 @@ def clean_eigen_vervoer(df: pd.DataFrame) -> pd.DataFrame:
         The DataFrame with the 'beschikking tot eigen vervoer?' column cleaned and standardized.
     """
     column = "beschikking tot eigen vervoer?"
-    df[column] = df[column].apply(lambda x: x.lower() if isinstance(x, str) else x)
+    df[column] = df[column].apply(lambda x: str(x).lower())
     df[column] = df[column].apply(lambda x: "nee dit heb ik niet" if str(x) in ["geen auto", "geen vervoer"] else x)
     df[column] = df[column].apply(lambda x: "ja een eigen auto of motor" if "motor" in str(x) else x)
     df[column] = df[column].apply(lambda x: "ja een eigen auto of motor" if "auto" in str(x) else x)
     df[column] = df[column].apply(lambda x: "ja een eigen auto of motor" if str(x) == "ja" else x)
     df[column] = df[column].apply(lambda x: "nee dit heb ik niet" if str(x) == "nee" else x)
+    df[column] = df[column].replace("nan",np.nan)
     return df
 
 
