@@ -21,15 +21,24 @@ def prepare_input_dataframe(df: pd.DataFrame, expected_columns: list) -> pd.Data
     Returns:
     - A dataframe with all the expected columns, filling missing ones with 0.
     """
-    # Step 1: Add missing columns with a default value (e.g., 0)
+    categorical_columns = df.select_dtypes(include=['object']).columns
+    # Identify non-object type columns
+    non_categorical_columns = df.select_dtypes(exclude=['object']).columns
+    # Dummy code the categorical columns
+    df_dummies = pd.get_dummies(df[categorical_columns])
+    # Select non-categorical columns
+    df_non_categorical = df[non_categorical_columns]
+    # Concatenate the dummy coded variables with the non-categorical columns
+    df_final = pd.concat([df_non_categorical, df_dummies], axis=1)
+    # Add missing columns with a default value (e.g., 0)
     for col in expected_columns:
         if col not in df.columns:
-            df[col] = 0
+            df_final[col] = 999
     
-    # Step 2: Reorder columns to match the expected order
-    df = df[expected_columns]
+    # Reorder columns to match the expected order
+    df_final = df_final[expected_columns]
     
-    return df
+    return df_final
 
 
 def run_data_prep(df: pd.DataFrame, data_dir: str) -> pd.DataFrame:
