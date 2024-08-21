@@ -59,7 +59,31 @@ def run_data_prep(df: pd.DataFrame, data_dir: str) -> pd.DataFrame:
     return df
 
 
-def prep_dataset_for_modelling(df: pd.DataFrame) -> pd.DataFrame:
+def replace_invalid_values(df, valid_values):
+    """
+    Replaces invalid categorical values in the DataFrame with "other".
+    Valid values are specified in the valid_values dictionary.
+    
+    Parameters:
+    df (pd.DataFrame): The DataFrame containing the data.
+    valid_values (dict): A dictionary where keys are column names and values are lists of valid values.
+    
+    Returns:
+    pd.DataFrame: The updated DataFrame with invalid values replaced by "other".
+    """
+    df_copy = df.copy()
+
+    for column, valid in valid_values.items():
+        if column in df_copy.columns:
+            # Apply the transformation
+            df_copy[column] = df_copy[column].apply(
+                lambda x: x if pd.isna(x) or x in valid else "other"
+            )
+    
+    return df_copy
+
+
+def prep_dataset_for_modelling(df, model_dir, data_set_name):
     """
     Prepares a dataset for modeling by converting categorical variables into dummy/indicator variables.
     This function identifies categorical columns (with an 'object' data type) in the input DataFrame,
@@ -68,19 +92,31 @@ def prep_dataset_for_modelling(df: pd.DataFrame) -> pd.DataFrame:
     -----------
     df : pd.DataFrame
         The input DataFrame that contains both categorical and non-categorical data.
+    model_dir: str
+    dataset_name: str
     Returns:
     --------
     pd.DataFrame
         A DataFrame where all categorical variables have been replaced with their dummy variables, 
         and all non-categorical columns are preserved.
     """
-    # Separate categorical (object) and non-categorical columns
-    categorical_columns: pd.DataFrame = df.select_dtypes(include='object')
-    non_categorical_columns: pd.DataFrame = df.select_dtypes(exclude='object')
+    # Identify columns with object data type (categorical variables)
+    categorical_columns = df.select_dtypes(include=['object']).columns
+    for cat_col in categorical_columns:
+        df = clean_categorical_variable(df, cat_col)
 
-    # Dummy code categorical columns and concatenate with non-categorical columns
-    df_final: pd.DataFrame = pd.concat([non_categorical_columns, pd.get_dummies(categorical_columns)], axis=1)
+    store_categorical_metadata(df, model_dir, f"{data_set_name}_categorical_meta_data.json")
+    # Identify non-object type columns
+    non_categorical_columns = df.select_dtypes(exclude=['object']).columns
 
+    # Dummy code the categorical columns
+    df_dummies = pd.get_dummies(df[categorical_columns])
+
+    # Select non-categorical columns
+    df_non_categorical = df[non_categorical_columns]
+
+    # Concatenate the dummy coded variables with the non-categorical columns
+    df_final = pd.concat([df_non_categorical, df_dummies], axis=1)
     return df_final
 
 
@@ -344,13 +380,12 @@ def clean_eigen_vervoer(df: pd.DataFrame) -> pd.DataFrame:
         The DataFrame with the 'beschikking tot eigen vervoer?' column cleaned and standardized.
     """
     column = "beschikking tot eigen vervoer?"
-    df[column] = df[column].apply(lambda x: str(x).lower())
+    df[column] = df[column].apply(lambda x: x.lower() if isinstance(x, str) else x)
     df[column] = df[column].apply(lambda x: "nee dit heb ik niet" if str(x) in ["geen auto", "geen vervoer"] else x)
     df[column] = df[column].apply(lambda x: "ja een eigen auto of motor" if "motor" in str(x) else x)
     df[column] = df[column].apply(lambda x: "ja een eigen auto of motor" if "auto" in str(x) else x)
     df[column] = df[column].apply(lambda x: "ja een eigen auto of motor" if str(x) == "ja" else x)
     df[column] = df[column].apply(lambda x: "nee dit heb ik niet" if str(x) == "nee" else x)
-    df[column] = df[column].replace("nan",np.nan)
     return df
 
 
@@ -548,7 +583,7 @@ def clean_and_combine_source_columns(df):
     merging_two_columns(df, 'utm_source', 'source')
     return df
 
-def store_categorical_metadata(df, json_filename):
+def store_categorical_metadata(df, model_dir, json_filename):
     """
     Store the metadata of categorical variables in a DataFrame into a JSON file.
     
@@ -563,9 +598,26 @@ def store_categorical_metadata(df, json_filename):
     metadata = {}
     for col in categorical_columns:
         metadata[col] = df[col].dropna().unique().tolist()  # Drop NA values before getting unique values
-    
+
+    json_file_path = os.path.join(model_dir, json_filename)
     # Step 3: Store the metadata in a JSON file
-    with open(json_filename, 'w') as f:
+    with open(json_file_path, 'w') as f:
         json.dump(metadata, f, indent=4)
     
     print(f"Metadata stored in {json_filename}")
+
+
+# Cleaning values with low frequency <10
+def clean_categorical_variable(df: pd.DataFrame, column_name: str):
+    print(f"working on {column_name}")
+    print(f"{len(df[df[column_name].isna()])} missings")
+    print("recategorizing all values that appear less then 10 times to 'other'")
+
+    value_counts = df[column_name].value_counts()
+    values_to_replace = value_counts[value_counts < 10].index
+    values_to_keep = value_counts[value_counts >= 10].index
+    df[column_name] = df[column_name].apply(lambda x: 'other' if x in values_to_replace else x)
+    print(f"replaced the following values with other: {values_to_replace}")
+    print(f"Keeping the following values: {values_to_keep}")
+    print("_________________________")
+    return df
