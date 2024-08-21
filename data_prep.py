@@ -33,7 +33,7 @@ def prepare_input_dataframe(df: pd.DataFrame, expected_columns: list) -> pd.Data
     # Add missing columns with a default value (e.g., 0)
     for col in expected_columns:
         if col not in df.columns:
-            df_final[col] = 999
+            df_final[col] = 0
     
     # Reorder columns to match the expected order
     df_final = df_final[expected_columns]
