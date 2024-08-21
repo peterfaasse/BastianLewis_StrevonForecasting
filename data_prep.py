@@ -49,7 +49,7 @@ def run_data_prep(df: pd.DataFrame, data_dir: str) -> pd.DataFrame:
     df = bereken_jaar_ervaring(df)
     df = convert_postcode(df, data_dir)
     df = clean_werksituatie(df)
-    df['Voorkeursbranche'] = df['Voorkeursbranche'].str.lower()
+    df['Voorkeursbranche'] = df['Voorkeursbranche'].apply(lambda x: x.lower() if isinstance(x, str) else x)
     df = clean_strevon_startsalaris_werktijden(df, "Strevon startsalaris")
     df = clean_strevon_startsalaris_werktijden(df, "Strevon werktijden")
     df['diff_days'] = (df['belafspraak'] - df['cdate']).dt.days
@@ -83,7 +83,7 @@ def replace_invalid_values(df, valid_values):
     return df_copy
 
 
-def prep_dataset_for_modelling(df: pd.DataFrame) -> pd.DataFrame:
+def prep_dataset_for_modelling(df, model_dir, data_set_name):
     """
     Prepares a dataset for modeling by converting categorical variables into dummy/indicator variables.
     This function identifies categorical columns (with an 'object' data type) in the input DataFrame,
@@ -92,19 +92,31 @@ def prep_dataset_for_modelling(df: pd.DataFrame) -> pd.DataFrame:
     -----------
     df : pd.DataFrame
         The input DataFrame that contains both categorical and non-categorical data.
+    model_dir: str
+    dataset_name: str
     Returns:
     --------
     pd.DataFrame
         A DataFrame where all categorical variables have been replaced with their dummy variables, 
         and all non-categorical columns are preserved.
     """
-    # Separate categorical (object) and non-categorical columns
-    categorical_columns: pd.DataFrame = df.select_dtypes(include='object')
-    non_categorical_columns: pd.DataFrame = df.select_dtypes(exclude='object')
+    # Identify columns with object data type (categorical variables)
+    categorical_columns = df.select_dtypes(include=['object']).columns
+    for cat_col in categorical_columns:
+        df = clean_categorical_variable(df, cat_col)
 
-    # Dummy code categorical columns and concatenate with non-categorical columns
-    df_final: pd.DataFrame = pd.concat([non_categorical_columns, pd.get_dummies(categorical_columns)], axis=1)
+    store_categorical_metadata(df, model_dir, f"{data_set_name}_categorical_meta_data.json")
+    # Identify non-object type columns
+    non_categorical_columns = df.select_dtypes(exclude=['object']).columns
 
+    # Dummy code the categorical columns
+    df_dummies = pd.get_dummies(df[categorical_columns])
+
+    # Select non-categorical columns
+    df_non_categorical = df[non_categorical_columns]
+
+    # Concatenate the dummy coded variables with the non-categorical columns
+    df_final = pd.concat([df_non_categorical, df_dummies], axis=1)
     return df_final
 
 
@@ -144,7 +156,7 @@ def clean_werksituatie(df: pd.DataFrame) -> pd.DataFrame:
     pd.DataFrame
         The DataFrame with the 'Werksituatie' column cleaned and standardized.
     """
-    df['Werksituatie'] = df['Werksituatie'].apply(lambda x: x.lower() if math.isnan(x) is False else x)
+    df['Werksituatie'] = df['Werksituatie'].apply(lambda x: x.lower() if isinstance(x, str) else x)
     df['Werksituatie'].replace("werkloos", "ik ben werkloos", inplace=True)
 
     klus_answers = ['niks: 0 klussen', 'weinig: 3 tot 4 klussen', 'regelmatig: 5 tot 8 klussen',
@@ -417,7 +429,7 @@ def convert_pagina_to_parent_page(df: pd.DataFrame) -> pd.DataFrame:
 def merge_UitkomstTelefonisch(df: pd.DataFrame) -> pd.DataFrame:
     """
     Merges the 'uitkomstTelefonischDeal' and 'uitkomstTelefonischContact' columns,
-    prioritizing 'uitkomstTelefonischDeal', and then drops the 'uitkomstTelefonischDeal' column.
+    prioritizing 'uitkomstTelefonischContact', and then drops the 'uitkomstTelefonischDeal' column.
 
     Parameters:
     -----------
@@ -429,7 +441,7 @@ def merge_UitkomstTelefonisch(df: pd.DataFrame) -> pd.DataFrame:
     pd.DataFrame
         The DataFrame with the 'uitkomstTelefonischDeal' column merged and removed.
     """
-    df['uitkomstTelefonischDeal'] = df['uitkomstTelefonischDeal'].fillna(df["uitkomstTelefonischContact"])
+    df['uitkomstTelefonischContact'] = df['uitkomstTelefonischContact'].fillna(df["uitkomstTelefonischDeal"])
     df.drop("uitkomstTelefonischDeal", axis=1, inplace=True)
     return df
 
@@ -571,7 +583,7 @@ def clean_and_combine_source_columns(df):
     merging_two_columns(df, 'utm_source', 'source')
     return df
 
-def store_categorical_metadata(df, json_filename):
+def store_categorical_metadata(df, model_dir, json_filename):
     """
     Store the metadata of categorical variables in a DataFrame into a JSON file.
     
@@ -586,9 +598,26 @@ def store_categorical_metadata(df, json_filename):
     metadata = {}
     for col in categorical_columns:
         metadata[col] = df[col].dropna().unique().tolist()  # Drop NA values before getting unique values
-    
+
+    json_file_path = os.path.join(model_dir, json_filename)
     # Step 3: Store the metadata in a JSON file
-    with open(json_filename, 'w') as f:
+    with open(json_file_path, 'w') as f:
         json.dump(metadata, f, indent=4)
     
     print(f"Metadata stored in {json_filename}")
+
+
+# Cleaning values with low frequency <10
+def clean_categorical_variable(df: pd.DataFrame, column_name: str):
+    print(f"working on {column_name}")
+    print(f"{len(df[df[column_name].isna()])} missings")
+    print("recategorizing all values that appear less then 10 times to 'other'")
+
+    value_counts = df[column_name].value_counts()
+    values_to_replace = value_counts[value_counts < 10].index
+    values_to_keep = value_counts[value_counts >= 10].index
+    df[column_name] = df[column_name].apply(lambda x: 'other' if x in values_to_replace else x)
+    print(f"replaced the following values with other: {values_to_replace}")
+    print(f"Keeping the following values: {values_to_keep}")
+    print("_________________________")
+    return df
