@@ -166,7 +166,7 @@ def clean_werksituatie(df: pd.DataFrame) -> pd.DataFrame:
         The DataFrame with the 'Werksituatie' column cleaned and standardized.
     """
     df['Werksituatie'] = df['Werksituatie'].apply(lambda x: x.lower() if isinstance(x, str) else x)
-    df['Werksituatie'].replace("werkloos", "ik ben werkloos", inplace=True)
+    df['Werksituatie'] = df['Werksituatie'].replace("werkloos", "ik ben werkloos")
 
     klus_answers = ['niks: 0 klussen', 'weinig: 3 tot 4 klussen', 'regelmatig: 5 tot 8 klussen',
                     'bij uitzondering: 1 tot 2 klussen', 'veel: meer dan 8 klussen']
@@ -205,7 +205,7 @@ def convert_postcode(df: pd.DataFrame, data_dir:str) -> pd.DataFrame:
     df.loc[df['Gemeente'].isna(), 'randstad'] = np.nan
     df.loc[df['postcode'] == 'Overig', 'randstad'] = False
 
-    df.drop(['postcode'], axis=1, inplace=True)
+    df = df.drop(['postcode'], axis=1)
     return df
 
 def date_cols_to_numeric(df: pd.DataFrame) -> pd.DataFrame:
@@ -451,7 +451,7 @@ def merge_UitkomstTelefonisch(df: pd.DataFrame) -> pd.DataFrame:
         The DataFrame with the 'uitkomstTelefonischDeal' column merged and removed.
     """
     df['uitkomstTelefonischContact'] = df['uitkomstTelefonischContact'].fillna(df["uitkomstTelefonischDeal"])
-    df.drop("uitkomstTelefonischDeal", axis=1, inplace=True)
+    df = df.drop("uitkomstTelefonischDeal", axis=1)
     return df
 
 
@@ -487,7 +487,7 @@ def cleaning_leeftijd(df):
     df['leeftijd'] = df['leeftijd'].replace(0,np.nan)
     df['leeftijd'] = df['leeftijd'].replace(1,np.nan)
 
-    df['leeftijd_cat'] = df['leeftijd'].apply(lambda x: categorize(x))
+    df['leeftijd_cat'] = df['leeftijd'].apply(categorize)
     return df
 
 
@@ -500,7 +500,7 @@ def split_adgroup_locations(df):
     df["utm_adgroup_location"] = df["utm_adgroup_location"].apply(lambda x: x if x in locations else None)
     #remove locations from utm_campaigns
     df[column_name+"_no_loc"] = df[column_name].apply(lambda x: "_".join(str(x).split("_")[:-1]) if str(x).split("_")[-1] in locations else x)
-    df.drop(['adgroup'],axis=1, inplace=True)
+    df = df.drop(['adgroup'],axis=1)
     return df
 
 
@@ -512,14 +512,14 @@ def split_campaign_locations(df):
     #remove locations from utm_campaigns
     df["utm_campaign_no_loc"] = df["utm_campaign"].apply(lambda x: "_".join(str(x).split("_")[:-1]) if str(x).split("_")[-1] in locations else x)
     # CampagneNaam is same as utm_campaign so drop
-    df.drop(['campagneNaam'], axis=1, inplace=True)
+    df = df.drop(['campagneNaam'], axis=1)
     return df
 
 def clean_utm_campaign(df):
     # cleaning utm_campaign
     column_name = 'utm_campaign'
-    df[column_name].replace('installatiemonteur_amstedram', 'installatiemonteur_amsterdam', inplace=True) #Mag dit is dit hetzelfde?
-    df[column_name].replace('installatiemonteur_amsterdan', 'installatiemonteur_amsterdam', inplace=True) #Mag dit is dit hetzelfde?
+    df[column_name] = df[column_name].replace('installatiemonteur_amstedram', 'installatiemonteur_amsterdam') #Mag dit is dit hetzelfde?
+    df[column_name] = df[column_name].replace('installatiemonteur_amsterdan', 'installatiemonteur_amsterdam') #Mag dit is dit hetzelfde?
     
     installatiemonteur_values = [val for val in df['utm_campaign'].unique() if "installatiemonteur-" in str(val)]
     if "installatiemonteur-exp" in installatiemonteur_values:
